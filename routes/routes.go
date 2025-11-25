@@ -21,6 +21,8 @@ func SetupRouter() *gin.Engine {
 	userController := controllers.NewUserController()
 	schoolController := controllers.NewSchoolController()
 	teamController := controllers.NewTeamController()
+	categoryController := controllers.NewCategoryController()
+	challengeController := controllers.NewChallengeController()
 
 	// 健康检查接口（不需要认证）
 	r.GET("/ping", func(c *gin.Context) {
@@ -47,15 +49,26 @@ func SetupRouter() *gin.Engine {
 			public.POST("/verify/email/send", userController.SendVerifyCode)
 			public.POST("/verify/email/check", userController.VerifyEmail)
 
-			// 公开查询
+			// 公开查询 - 学校
 			public.GET("/schools", schoolController.GetSchools)                        // 获取学校列表
 			public.GET("/schools/:id", schoolController.GetSchoolByID)                 // 获取学校详情
 			public.GET("/schools/name/:school_name", schoolController.GetSchoolByName) // 根据名称查学校
 
-			// 团队公开信息
+			// 公开查询 - 团队
 			public.GET("/teams", teamController.GetTeamList)      // 获取团队列表
 			public.GET("/teams/:id", teamController.GetTeamByID)  // 获取团队详情
 			public.GET("/teams/rank", teamController.GetTeamRank) // 获取团队排名
+
+			// 公开查询 - 题目与分类
+			public.GET("/categories", categoryController.GetList)        // 获取题目分类列表
+			public.GET("/categories/:id", categoryController.GetDetail)  // 获取分类详情
+			public.GET("/challenges", challengeController.GetList)       // 获取题目列表
+			public.GET("/challenges/:id", challengeController.GetDetail) // 获取题目详情
+
+			// 公开查询 - 解题动态
+			public.GET("/logs/solves", challengeController.GetRecentSolves)    // 获取最新解题动态
+			public.GET("/teams/:id/solves", challengeController.GetTeamSolves) // 获取特定团队解题记录
+			public.GET("/users/:id/solves", challengeController.GetUserSolves) // 获取特定用户解题记录
 		}
 
 		// ---------------------------
@@ -83,6 +96,23 @@ func SetupRouter() *gin.Engine {
 				teams.POST("/transfer", teamController.TransferCaptain) // 转让队长(队长)
 				teams.POST("/remove", teamController.RemoveMember)      // 移除成员(队长)
 				teams.POST("/disband", teamController.DisbandTeam)      // 解散团队(队长)
+			}
+
+			// 题目交互
+			challenges := auth.Group("/challenges")
+			{
+				challenges.POST("/:id/submit", challengeController.SubmitFlag)                                     // 提交 Flag
+				challenges.POST("/:id/container/start", challengeController.StartContainer)                        // 启动容器
+				challenges.POST("/:id/container/stop", challengeController.StopContainer)                          // 停止容器
+				challenges.POST("/:id/container/renew", challengeController.RenewContainer)                        // 续期容器
+				challenges.GET("/:id/container/status", challengeController.GetContainerStatus)                    // 获取容器状态
+				challenges.GET("/:id/attachments/:attachment_id/download", challengeController.DownloadAttachment) // 下载附件
+			}
+
+			// 容器管理（用户侧）
+			containers := auth.Group("/containers")
+			{
+				containers.POST("/destroy", challengeController.DestroyContainer) // 销毁容器
 			}
 
 			// ---------------------------
@@ -115,6 +145,26 @@ func SetupRouter() *gin.Engine {
 
 				// 团队管理
 				admin.PATCH("/teams/:id/status", teamController.UpdateTeamStatus) // 管理团队状态
+
+				// 分类管理
+				admin.POST("/categories", categoryController.Create)
+				admin.PUT("/categories/:id", categoryController.Update)
+				admin.DELETE("/categories/:id", categoryController.Delete)
+				admin.PATCH("/categories/:id/status", categoryController.UpdateStatus)
+
+				// 题目管理
+				admin.POST("/challenges", challengeController.Create)
+				admin.PUT("/challenges/:id", challengeController.Update)
+				admin.DELETE("/challenges/:id", challengeController.Delete)
+				admin.PATCH("/challenges/:id/state", challengeController.UpdateState)
+
+				// 附件管理
+				admin.POST("/challenges/:id/attachments", challengeController.UploadAttachment)
+				admin.DELETE("/challenges/:id/attachments/:attachment_id", challengeController.DeleteAttachment)
+
+				// 容器管理
+				admin.GET("/admin/containers", challengeController.GetAdminContainers)
+				admin.POST("/admin/containers/:id/stop", challengeController.AdminStopContainer)
 			}
 		}
 	}
